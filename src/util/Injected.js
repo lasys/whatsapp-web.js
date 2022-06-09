@@ -67,6 +67,8 @@ exports.ExposeStore = (moduleRaidStr) => {
             });
         };
     }
+
+    window.Store.LoadUtils = window.mR.findModule('loadEarlierMsgs')[0];
 };
 
 exports.LoadUtils = () => {

@@ -176,15 +176,15 @@ class Chat extends Base {
      */
     async fetchMessages(searchOptions) {
         let messages = await this.client.pupPage.evaluate(async (chatId, searchOptions) => {
-            const msgFilter = m => !m.isNotification; // dont include notification messages
+            const msgFilter = m => !m.isNotification; // don't include notification messages
 
             const chat = window.Store.Chat.get(chatId);
             let msgs = chat.msgs._models.filter(msgFilter);
 
             if (searchOptions && searchOptions.limit > 0) {
                 while (msgs.length < searchOptions.limit) {
-                    const loadedMessages = await chat.preload();
-                    if (!loadedMessages) break;
+                    const loadedMessages = await window.Store.LoadUtils.loadEarlierMsgs(chat);
+                    if (!loadedMessages?.length) break;
                     msgs = [...loadedMessages.filter(msgFilter), ...msgs];
                 }
                 
