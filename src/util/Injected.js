@@ -13,14 +13,8 @@ exports.ExposeStore = (moduleRaidStr) => {
     window.Store.Cmd = window.mR.findModule('Cmd')[0].Cmd;
     window.Store.CryptoLib = window.mR.findModule('decryptE2EMedia')[0];
     window.Store.DownloadManager = window.mR.findModule('downloadManager')[0].downloadManager;
-    window.Store.MDBackend = window.mR.findModule('isMDBackend')[0].isMDBackend();
-    if (window.mR.findModule('isMDBackend')[0]?.isMDBackend) {
-        window.Store.MDBackend = window.mR.findModule('isMDBackend')[0].isMDBackend();
-    } else {
-        window.Store.MDBackend = true;
-    }
     window.Store.Features = window.mR.findModule('FEATURE_CHANGE_EVENT')[0].LegacyPhoneFeatures;
-    window.Store.GroupMetadata = window.mR.findModule((module) => module.default && module.default.handlePendingInvite)[0].default;
+    window.Store.GroupMetadata = window.mR.findModule('GroupMetadata')[0].default.GroupMetadata;
     window.Store.Invite = window.mR.findModule('sendJoinGroupViaInvite')[0];
     window.Store.InviteInfo = window.mR.findModule('sendQueryGroupInvite')[0];
     window.Store.Label = window.mR.findModule('LabelCollection')[0].LabelCollection;
@@ -44,9 +38,6 @@ exports.ExposeStore = (moduleRaidStr) => {
     window.Store.UserConstructor = window.mR.findModule((module) => (module.default && module.default.prototype && module.default.prototype.isServer && module.default.prototype.isUser) ? module.default : null)[0].default;
     window.Store.Validators = window.mR.findModule('findLinks')[0];
     window.Store.VCard = window.mR.findModule('vcardFromContactModel')[0];
-    if (window.mR.findModule('queryLinkPreview')[0]?.default) {
-        window.Store.Wap = window.mR.findModule('queryLinkPreview')[0].default;
-    }
     window.Store.WidFactory = window.mR.findModule('createWid')[0];
     window.Store.ProfilePic = window.mR.findModule('profilePicResync')[0];
     window.Store.PresenceUtils = window.mR.findModule('sendPresenceAvailable')[0];
@@ -55,11 +46,20 @@ exports.ExposeStore = (moduleRaidStr) => {
     window.Store.JoinInviteV4 = window.mR.findModule('sendJoinGroupViaInviteV4')[0];
     window.Store.findCommonGroups = window.mR.findModule('findCommonGroups')[0].findCommonGroups;
     window.Store.StatusUtils = window.mR.findModule('setMyStatus')[0];
+    window.Store.ConversationMsgs = window.mR.findModule('loadEarlierMsgs')[0];
+    window.Store.sendReactionToMsg = window.mR.findModule('sendReactionToMsg')[0].sendReactionToMsg;
+    window.Store.createOrUpdateReactionsModule = window.mR.findModule('createOrUpdateReactions')[0];
+    window.Store.EphemeralFields = window.mR.findModule('getEphemeralFields')[0];
+    window.Store.ReplyUtils = window.mR.findModule('canReplyMsg').length > 0 && window.mR.findModule('canReplyMsg')[0];
+    window.Store.MsgActionChecks = window.mR.findModule('canSenderRevokeMsg')[0];
+    window.Store.QuotedMsg = window.mR.findModule('getQuotedMsgObj')[0];
+    window.Store.Socket = window.mR.findModule('deprecatedSendIq')[0];
+    window.Store.SocketWap = window.mR.findModule('wap')[0];
     window.Store.StickerTools = {
         ...window.mR.findModule('toWebpSticker')[0],
         ...window.mR.findModule('addWebpMetadata')[0]
     };
-  
+
     window.Store.GroupUtils = {
         ...window.mR.findModule('sendCreateGroup')[0],
         ...window.mR.findModule('sendSetGroupSubject')[0],
@@ -75,7 +75,18 @@ exports.ExposeStore = (moduleRaidStr) => {
         };
     }
 
-    window.Store.LoadUtils = window.mR.findModule('loadEarlierMsgs')[0];
+    // TODO remove these once everybody has been updated to WWebJS with legacy sessions removed
+    const _linkPreview = window.mR.findModule('queryLinkPreview');
+    if (_linkPreview && _linkPreview[0] && _linkPreview[0].default) {
+        window.Store.Wap = _linkPreview[0].default;
+    }
+
+    const _isMDBackend = window.mR.findModule('isMDBackend');
+    if(_isMDBackend && _isMDBackend[0] && _isMDBackend[0].isMDBackend) {
+        window.Store.MDBackend = _isMDBackend[0].isMDBackend();
+    } else {
+        window.Store.MDBackend = true;
+    }
 };
 
 exports.LoadUtils = () => {
@@ -107,11 +118,16 @@ exports.LoadUtils = () => {
             delete options.attachment;
             delete options.sendMediaAsSticker;
         }
-
         let quotedMsgOptions = {};
         if (options.quotedMessageId) {
             let quotedMessage = window.Store.Msg.get(options.quotedMessageId);
-            if (quotedMessage.canReply()) {
+
+            // TODO remove .canReply() once all clients are updated to >= v2.2241.6
+            const canReply = window.Store.ReplyUtils ?
+                window.Store.ReplyUtils.canReplyMsg(quotedMessage.unsafe()) :
+                quotedMessage.canReply();
+
+            if (canReply) {
                 quotedMsgOptions = quotedMessage.msgContextInfo(chat);
             }
             delete options.quotedMessageId;
@@ -179,7 +195,7 @@ exports.LoadUtils = () => {
                 }
             }
         }
-        
+
         let buttonOptions = {};
         if(options.buttons){
             let caption;
@@ -234,11 +250,7 @@ exports.LoadUtils = () => {
         const extraOptions = options.extraOptions || {};
         delete options.extraOptions;
 
-        const ephemeralSettings = {
-            ephemeralDuration: chat.isEphemeralSettingOn() ? chat.getEphemeralSetting() : undefined,
-            ephemeralSettingTimestamp: chat.getEphemeralSettingTimestamp() || undefined,
-            disappearingModeInitiator: chat.getDisappearingModeInitiator() || undefined,
-        };
+        const ephemeralFields = window.Store.EphemeralFields.getEphemeralFields(chat);
 
         const message = {
             ...options,
@@ -252,7 +264,7 @@ exports.LoadUtils = () => {
             t: parseInt(new Date().getTime() / 1000),
             isNewMsg: true,
             type: 'chat',
-            ...ephemeralSettings,
+            ...ephemeralFields,
             ...locationOptions,
             ...attOptions,
             ...quotedMsgOptions,
@@ -373,7 +385,7 @@ exports.LoadUtils = () => {
 
         msg.isEphemeral = message.isEphemeral;
         msg.isStatusV3 = message.isStatusV3;
-        msg.links = (message.getLinks()).map(link => ({
+        msg.links = (message.getRawLinks()).map(link => ({
             link: link.href,
             isSuspicious: Boolean(link.suspiciousCharacters && link.suspiciousCharacters.size)
         }));
@@ -425,7 +437,7 @@ exports.LoadUtils = () => {
     };
 
     window.WWebJS.getChats = async () => {
-        const chats = window.Store.Chat._models;
+        const chats = window.Store.Chat.getModelsArray();
 
         const chatPromises = chats.map(chat => window.WWebJS.getChatModel(chat));
         return await Promise.all(chatPromises);
@@ -457,7 +469,7 @@ exports.LoadUtils = () => {
     };
 
     window.WWebJS.getContacts = () => {
-        const contacts = window.Store.Contact._models;
+        const contacts = window.Store.Contact.getModelsArray();
         return contacts.map(contact => window.WWebJS.getContactModel(contact));
     };
 
@@ -486,6 +498,20 @@ exports.LoadUtils = () => {
         }
         return window.btoa(binary);
     };
+
+    window.WWebJS.arrayBufferToBase64Async = (arrayBuffer) =>
+        new Promise((resolve, reject) => {
+            const blob = new Blob([arrayBuffer], {
+                type: 'application/octet-stream',
+            });
+            const fileReader = new FileReader();
+            fileReader.onload = () => {
+                const [, data] = fileReader.result.split(',');
+                resolve(data);
+            };
+            fileReader.onerror = (e) => reject(e);
+            fileReader.readAsDataURL(blob);
+        });
 
     window.WWebJS.getFileHash = async (data) => {
         let buffer = await data.arrayBuffer();
@@ -526,17 +552,17 @@ exports.LoadUtils = () => {
             chatId = window.Store.WidFactory.createWid(chatId);
         }
         switch (state) {
-        case 'typing':
-            await window.Store.ChatState.sendChatStateComposing(chatId);
-            break;
-        case 'recording':
-            await window.Store.ChatState.sendChatStateRecording(chatId);
-            break;
-        case 'stop':
-            await window.Store.ChatState.sendChatStatePaused(chatId);
-            break;
-        default:
-            throw 'Invalid chatstate';
+            case 'typing':
+                await window.Store.ChatState.sendChatStateComposing(chatId);
+                break;
+            case 'recording':
+                await window.Store.ChatState.sendChatStateRecording(chatId);
+                break;
+            case 'stop':
+                await window.Store.ChatState.sendChatStatePaused(chatId);
+                break;
+            default:
+                throw 'Invalid chatstate';
         }
 
         return true;
@@ -550,7 +576,7 @@ exports.LoadUtils = () => {
     };
 
     window.WWebJS.getLabels = () => {
-        const labels = window.Store.Label._models;
+        const labels = window.Store.Label.getModelsArray();
         return labels.map(label => window.WWebJS.getLabelModel(label));
     };
 
@@ -577,5 +603,22 @@ exports.LoadUtils = () => {
         }
 
         return undefined;
+    };
+
+    window.WWebJS.rejectCall = async (peerJid, id) => {
+        peerJid = peerJid.split('@')[0] + '@s.whatsapp.net';
+        let userId = window.Store.User.getMaybeMeUser().user + '@s.whatsapp.net';
+        const stanza = window.Store.SocketWap.wap('call', {
+            id: window.Store.SocketWap.generateId(),
+            from: window.Store.SocketWap.USER_JID(userId),
+            to: window.Store.SocketWap.USER_JID(peerJid),
+        }, [
+            window.Store.SocketWap.wap('reject', {
+                'call-id': id,
+                'call-creator': window.Store.SocketWap.USER_JID(peerJid),
+                count: '0',
+            })
+        ]);
+        await window.Store.Socket.deprecatedCastStanza(stanza);
     };
 };
